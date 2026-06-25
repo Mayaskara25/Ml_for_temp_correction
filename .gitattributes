@@ -1,0 +1,14 @@
+
+# Set the default behavior to automatically normalize line endings
+* text=auto
+
+# Explicitly declare text files you want to always be LF on check-in
+*.py text
+*.txt text
+*.ino text
+*.h text
+
+# Explicitly declare binary files that should not be modified
+*.pdf binary
+*.csv text
+
