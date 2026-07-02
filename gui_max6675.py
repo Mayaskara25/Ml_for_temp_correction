@@ -5,6 +5,8 @@ import threading
 import time
 import random
 
+from calibration_io import dynamic_error, parse_serial_line, sensor_status_text
+
 # --- Configuration ---
 SERIAL_PORT = 'COM8'  # Change this to your ESP32's COM port later
 BAUD_RATE = 115200
@@ -94,6 +96,23 @@ class SensorGUI:
         if pt100_status is not None:
             self.pt100_status_var.set(pt100_status)
 
+    def apply_sensor_row(self, row):
+        err = dynamic_error(row)
+        live_k_val = format_temp(row.live_k_temp_c)
+        synthetic_k_val = format_temp(row.synthetic_k_temp_c)
+        live_pt_val = format_temp(row.live_pt100_temp_c)
+        synthetic_pt_val = format_temp(row.synthetic_pt100_temp_c)
+        corr_val = format_temp(row.corrected_temp_c)
+        err_val = "--.-- C" if err is None else f"{err:+.2f} C"
+
+        self.root.after(
+            0, self.update_ui_safe,
+            None, live_pt_val, synthetic_pt_val, live_k_val,
+            synthetic_k_val, corr_val, err_val,
+            sensor_status_text(row.k_sensor_ok),
+            sensor_status_text(row.pt100_sensor_ok)
+        )
+
     def read_data(self):
         try:
             ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
@@ -107,27 +126,10 @@ class SensorGUI:
             while self.running:
                 if ser.in_waiting > 0:
                     line = ser.readline().decode('utf-8', errors='ignore').strip()
-                    parts = line.split(',')
-                    if len(parts) == 8:
-                        try:
-                            live_k_val = f"{float(parts[1]):.2f} C"
-                            synthetic_k_val = f"{float(parts[2]):.2f} C"
-                            live_pt_val = f"{float(parts[3]):.2f} C"
-                            synthetic_pt_val = f"{float(parts[4]):.2f} C"
-                            corr_val = f"{float(parts[5]):.2f} C"
-                            err_val = f"{(float(parts[5]) - float(parts[4])):+.2f} C"
-                            ktype_status = "OK" if parts[6].strip() == "1" else "FALLBACK"
-                            pt100_status = "OK" if parts[7].strip() == "1" else "FALLBACK"
-
-                            self.root.after(
-                                0, self.update_ui_safe,
-                                None, live_pt_val, synthetic_pt_val, live_k_val,
-                                synthetic_k_val, corr_val, err_val,
-                                ktype_status, pt100_status
-                            )
-                            last_data_time = time.time()
-                        except ValueError:
-                            pass
+                    row = parse_serial_line(line)
+                    if row is not None:
+                        self.apply_sensor_row(row)
+                        last_data_time = time.time()
 
                 if time.time() - last_data_time > 5:
                     raise RuntimeError("No serial data received, switching to simulation mode")
@@ -165,6 +167,10 @@ class SensorGUI:
     def on_close(self):
         self.running = False
         self.root.destroy()
+
+
+def format_temp(value):
+    return "--.-- C" if value is None else f"{value:.2f} C"
 
 
 if __name__ == "__main__":

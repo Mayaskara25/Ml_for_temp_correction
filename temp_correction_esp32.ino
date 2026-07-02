@@ -90,7 +90,7 @@ void setup() {
     }
 
     Serial.println("[OK]   Model loaded successfully.");
-    Serial.println("Timestamp_ms,K_Temp_C,PT100_Temp_C,Corrected_Temp_C");
+    Serial.println("Timestamp_ms,Live_K_Temp_C,Synthetic_K_Temp_C,Live_PT100_Temp_C,Synthetic_PT100_Temp_C,Corrected_Temp_C,K_Sensor_OK,PT100_Sensor_OK");
 
     // Pre-fill buffer with a neutral starting value so early predictions
     // are not polluted by zero-padding
@@ -145,13 +145,21 @@ void loop() {
     float corrected_temp = unscale_temp(corrected_scaled);
 
     // ------------------------------------------------------------------
-    // 5. Print CSV line: Timestamp, K_Temp, PT100_Temp, Corrected_Temp
+    // 5. Print canonical CSV line for GUI/logger compatibility
     // ------------------------------------------------------------------
     Serial.print(now);
     Serial.print(",");
     Serial.print(k_temp, 2);
     Serial.print(",");
+    Serial.print(k_temp, 2);
+    Serial.print(",");
     Serial.print(pt100_temp, 2);
     Serial.print(",");
-    Serial.println(corrected_temp, 2);
+    Serial.print(pt100_temp, 2);
+    Serial.print(",");
+    Serial.print(corrected_temp, 2);
+    Serial.print(",");
+    Serial.print("1");
+    Serial.print(",");
+    Serial.println("1");
 }
