@@ -2,9 +2,9 @@
   temp_correction_max6675.ino
   ---------------------------
   ESP32 + MAX6675 K-type thermocouple reader with the existing dense ML model.
-  The sketch keeps the synthetic PT100/reference signal and synthetic model
-  input for testing, but also reads the live thermocouple value from the MAX6675
-  and prints it for display only.
+  The sketch emits the canonical 8-column CSV stream used by the GUI/logger.
+  It uses live MAX6675 data for model input when valid and falls back to a
+  synthetic K-type signal when the thermocouple is unavailable.
 
   Wiring used by the user:
     SO  -> GPIO19
@@ -64,7 +64,7 @@ void setup() {
     }
 
     Serial.println("[OK]   Model loaded successfully.");
-    Serial.println("Timestamp_ms,K_Temp_C,PT100_Temp_C,Corrected_Temp_C,Sensor_OK");
+    Serial.println("Timestamp_ms,Live_K_Temp_C,Synthetic_K_Temp_C,Live_PT100_Temp_C,Synthetic_PT100_Temp_C,Corrected_Temp_C,K_Sensor_OK,PT100_Sensor_OK");
 
     float neutral = scale_temp(25.0f);
     for (int i = 0; i < NUMBER_OF_INPUTS; i++) {
@@ -79,26 +79,27 @@ void loop() {
 
     fake_time += 0.5f;
 
-    // Keep a synthetic reference stream so the model still behaves like the old setup.
-    float pt100_temp = 40.0f + 10.0f * sinf(fake_time / 10.0f);
+    // Keep a synthetic reference stream until a tracked MAX31865 sketch is added.
+    float synthetic_pt100_temp = 40.0f + 10.0f * sinf(fake_time / 10.0f);
 
-    // Read the actual thermocouple for display only.
+    // Read the actual thermocouple for display and model input.
     float k_temp = thermocouple.readCelsius();
-    bool sensor_ok = true;
+    bool k_sensor_ok = true;
 
     // MAX6675 commonly returns NAN when the probe is open/disconnected.
     if (isnan(k_temp) || k_temp < -100.0f || k_temp > 1024.0f) {
-        sensor_ok = false;
+        k_sensor_ok = false;
         k_temp = 25.0f; // fallback for display if the probe is disconnected
     }
 
-    // The model input remains fully synthetic.
     float synthetic_k_for_model = 40.0f + 10.0f * sinf((fake_time - 2.0f) / 10.0f) + 0.6f;
+    float model_k_input = k_sensor_ok ? k_temp : synthetic_k_for_model;
+    bool pt100_sensor_ok = false;
 
     for (int i = 0; i < NUMBER_OF_INPUTS - 1; i++) {
         input_buffer[i] = input_buffer[i + 1];
     }
-    input_buffer[NUMBER_OF_INPUTS - 1] = scale_temp(synthetic_k_for_model);
+    input_buffer[NUMBER_OF_INPUTS - 1] = scale_temp(model_k_input);
 
     float corrected_scaled = ml.predict(input_buffer);
     if (!ml.isOk()) {
@@ -114,9 +115,15 @@ void loop() {
     Serial.print(",");
     Serial.print(k_temp, 2);
     Serial.print(",");
-    Serial.print(pt100_temp, 2);
+    Serial.print(model_k_input, 2);
+    Serial.print(",");
+    Serial.print(synthetic_pt100_temp, 2);
+    Serial.print(",");
+    Serial.print(synthetic_pt100_temp, 2);
     Serial.print(",");
     Serial.print(corrected_temp, 2);
     Serial.print(",");
-    Serial.println(sensor_ok ? "1" : "0");
+    Serial.print(k_sensor_ok ? "1" : "0");
+    Serial.print(",");
+    Serial.println(pt100_sensor_ok ? "1" : "0");
 }
