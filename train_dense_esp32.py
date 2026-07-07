@@ -23,8 +23,8 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input, Dense
 
 # --- Configuration ---
-CSV_FILE    = 'synthetic_training_data.csv'
-HEADER_FILE = 'model_data.h'
+CSV_FILE    = 'dataset.csv'
+HEADER_FILE = 'model_data_real.h'
 LOOKBACK    = 10   # Must match NUMBER_OF_INPUTS in the Arduino sketch
 
 # Normalization bounds — must be identical in the Arduino sketch

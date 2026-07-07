@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Arduino IDE build cache
+b/
+
+# Planning / instruction docs (not part of the shipped project)
+PLAN.md
+CLAUDE.md
+
+# Generated / trained artifacts -- regenerate via the training scripts
+dataset.csv
+synthetic_training_data.csv
+model_data*.h
+rf_model_v2.h
+model_comparison_v2.csv
+model_comparison_v2.md
+model_comparison_v2.png

@@ -1,4 +1,4 @@
-import tkinter as tk
+﻿import tkinter as tk
 from tkinter import ttk
 import serial
 import threading
@@ -28,8 +28,6 @@ class SensorGUI:
         self.status_var = tk.StringVar(value="[+] Hardware Status: DISCONNECTED (Simulation Mode)")
         self.ktype_var = tk.StringVar(value="--.-- C")
         self.live_pt100_var = tk.StringVar(value="--.-- C")
-        self.synthetic_ktype_var = tk.StringVar(value="--.-- C")
-        self.synthetic_pt100_var = tk.StringVar(value="--.-- C")
         self.corrected_var = tk.StringVar(value="--.-- C")
         self.error_var = tk.StringVar(value="--.-- C")
         self.ktype_status_var = tk.StringVar(value="--")
@@ -61,30 +59,21 @@ class SensorGUI:
         ttk.Label(tree_frame, text="  |-- MAX31865 Sensor Status  : ").grid(row=4, column=0, sticky="w")
         ttk.Label(tree_frame, textvariable=self.pt100_status_var, style="Value.TLabel").grid(row=4, column=1, sticky="w")
 
-        ttk.Label(tree_frame, text="\n[-] Simulated / Model Values").grid(row=5, column=0, sticky="w")
-        ttk.Label(tree_frame, text="  |-- Synthetic PT100 Ref     : ").grid(row=6, column=0, sticky="w")
-        ttk.Label(tree_frame, textvariable=self.synthetic_pt100_var, style="Value.TLabel").grid(row=6, column=1, sticky="w")
-        ttk.Label(tree_frame, text="  |-- Synthetic K-Type Input  : ").grid(row=7, column=0, sticky="w")
-        ttk.Label(tree_frame, textvariable=self.synthetic_ktype_var, style="Value.TLabel").grid(row=7, column=1, sticky="w")
-        ttk.Label(tree_frame, text="  |-- Correction Engine Output: ").grid(row=8, column=0, sticky="w")
-        ttk.Label(tree_frame, textvariable=self.corrected_var, style="Value.TLabel", foreground="#c586c0").grid(row=8, column=1, sticky="w")
-        ttk.Label(tree_frame, text="  |-- Dynamic Error           : ").grid(row=9, column=0, sticky="w")
-        ttk.Label(tree_frame, textvariable=self.error_var, style="Value.TLabel").grid(row=9, column=1, sticky="w")
+        ttk.Label(tree_frame, text="\n[-] Correction Engine").grid(row=5, column=0, sticky="w")
+        ttk.Label(tree_frame, text="  |-- Correction Engine Output: ").grid(row=6, column=0, sticky="w")
+        ttk.Label(tree_frame, textvariable=self.corrected_var, style="Value.TLabel", foreground="#c586c0").grid(row=6, column=1, sticky="w")
+        ttk.Label(tree_frame, text="  |-- Dynamic Error           : ").grid(row=7, column=0, sticky="w")
+        ttk.Label(tree_frame, textvariable=self.error_var, style="Value.TLabel").grid(row=7, column=1, sticky="w")
 
         ttk.Label(self.root, text="======================================================", font=("Consolas", 12)).pack(side="bottom", pady=10)
 
-    def update_ui_safe(self, status, live_pt100, synthetic_pt100, ktype, synthetic_ktype,
-                       corrected, error, ktype_status, pt100_status):
+    def update_ui_safe(self, status, live_pt100, ktype, corrected, error, ktype_status, pt100_status):
         if status:
             self.status_var.set(status)
         if live_pt100:
             self.live_pt100_var.set(live_pt100)
-        if synthetic_pt100:
-            self.synthetic_pt100_var.set(synthetic_pt100)
         if ktype:
             self.ktype_var.set(ktype)
-        if synthetic_ktype:
-            self.synthetic_ktype_var.set(synthetic_ktype)
         if corrected:
             self.corrected_var.set(corrected)
         if error:
@@ -100,7 +89,7 @@ class SensorGUI:
             self.root.after(
                 0, self.update_ui_safe,
                 f"[+] Hardware Status: CONNECTED ({SERIAL_PORT})",
-                None, None, None, None, None, None, None, None
+                None, None, None, None, None, None
             )
             last_data_time = time.time()
 
@@ -108,21 +97,19 @@ class SensorGUI:
                 if ser.in_waiting > 0:
                     line = ser.readline().decode('utf-8', errors='ignore').strip()
                     parts = line.split(',')
-                    if len(parts) == 8:
+                    if len(parts) >= 8:
                         try:
                             live_k_val = f"{float(parts[1]):.2f} C"
-                            synthetic_k_val = f"{float(parts[2]):.2f} C"
                             live_pt_val = f"{float(parts[3]):.2f} C"
-                            synthetic_pt_val = f"{float(parts[4]):.2f} C"
                             corr_val = f"{float(parts[5]):.2f} C"
-                            err_val = f"{(float(parts[5]) - float(parts[4])):+.2f} C"
+                            err_val = f"{(float(parts[5]) - float(parts[3])):+.2f} C"
                             ktype_status = "OK" if parts[6].strip() == "1" else "FALLBACK"
                             pt100_status = "OK" if parts[7].strip() == "1" else "FALLBACK"
 
                             self.root.after(
                                 0, self.update_ui_safe,
-                                None, live_pt_val, synthetic_pt_val, live_k_val,
-                                synthetic_k_val, corr_val, err_val,
+                                None, live_pt_val, live_k_val,
+                                corr_val, err_val,
                                 ktype_status, pt100_status
                             )
                             last_data_time = time.time()
@@ -137,7 +124,7 @@ class SensorGUI:
             self.root.after(
                 0, self.update_ui_safe,
                 "[+] Hardware Status: DISCONNECTED (Simulation Mode)",
-                None, None, None, None, None, None, "N/A", "N/A"
+                None, None, None, None, "N/A", "N/A"
             )
             base_temp = 25.0
 
@@ -145,19 +132,16 @@ class SensorGUI:
                 base_temp += random.uniform(-0.5, 0.5)
                 live_pt100_temp = base_temp + random.uniform(-0.3, 0.3)
                 k_temp = base_temp + random.uniform(-1.0, 1.0)
-                synthetic_k_temp = base_temp + random.uniform(-0.8, 0.8)
                 lstm_temp = base_temp + random.uniform(-0.1, 0.1)
 
                 live_pt_val = f"{live_pt100_temp:.2f} C"
-                synthetic_pt_val = f"{base_temp:.2f} C"
                 k_val = f"{k_temp:.2f} C"
-                synthetic_k_val = f"{synthetic_k_temp:.2f} C"
                 corr_val = f"{lstm_temp:.2f} C"
-                err_val = f"{lstm_temp - base_temp:+.2f} C"
+                err_val = f"{lstm_temp - live_pt100_temp:+.2f} C"
 
                 self.root.after(
                     0, self.update_ui_safe,
-                    None, live_pt_val, synthetic_pt_val, k_val, synthetic_k_val,
+                    None, live_pt_val, k_val,
                     corr_val, err_val, "SIM", "SIM"
                 )
                 time.sleep(0.5)
@@ -172,3 +156,4 @@ if __name__ == "__main__":
     app = SensorGUI(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
+
