@@ -304,7 +304,19 @@ class HadamardTransform(tf.keras.layers.Layer):
 
     def call(self, x):
         coeffs = tf.matmul(x, self.H)
-        thresholded = tf.sign(coeffs) * tf.nn.relu(tf.abs(coeffs) - self.theta)
+        # Soft-threshold expressed purely via RELU and subtraction -- no
+        # SIGN, ABS, WHERE, or SELECT op anywhere in this formula.
+        # sign(x)*relu(|x|-theta) == relu(x-theta) - relu(-x-theta)
+        # (identical for x>theta, x<-theta, and |x|<=theta -- verify by cases).
+        # A prior version used tf.sign()/tf.abs(), and even a tf.where()-based
+        # substitute for tf.sign() alone still failed on-device: the TFLite
+        # converter's graph optimizer can canonicalize a "where(x>=0, 1, -1)"
+        # pattern back into a SIGN op during conversion, and this ESP32
+        # build's AllOpsResolver does not have SIGN registered, so
+        # AllocateTensors() failed at runtime regardless of the Python source
+        # no longer calling tf.sign() directly. This RELU-only formulation
+        # cannot be fused back into SIGN.
+        thresholded = tf.nn.relu(coeffs - self.theta) - tf.nn.relu(-coeffs - self.theta)
         return tf.matmul(thresholded, self.H)
 
     def get_config(self):

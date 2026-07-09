@@ -19,12 +19,12 @@
   cross-precision rankings were observed to change substantially between
   training runs, since the training script never previously seeded TF/Keras's
   random init):
-    Dense_v2:        float32 chosen -- best RMSE (0.3889 C) of its 3 variants;
-                      ptq_int8 (0.5163 C) and qat_int8 (0.6473 C) were both
-                      meaningfully worse this run, despite being smaller.
-    TCN_Hadamard_v2: float32 chosen -- best RMSE (0.4258 C) AND smaller size
-                      (11096 B) than its only other variant, ptq_int8
-                      (0.7208 C, 12160 B -- worse on both axes this run). QAT
+    Dense_v2:        float32 chosen -- best RMSE (0.3957 C) of its 3 variants;
+                      ptq_int8 (0.4279 C) and qat_int8 (0.4426 C) were both
+                      worse this run, despite being smaller.
+    TCN_Hadamard_v2: float32 chosen -- best RMSE (0.3684 C) AND smaller size
+                      (11144 B) than its only other variant, ptq_int8
+                      (0.5813 C, 12208 B -- worse on both axes this run). QAT
                       was not available for this model at all:
                       tensorflow-model-optimization's default quantize
                       registry does not support Conv1D layers.
@@ -33,10 +33,9 @@
                       of what the comparison table shows for its own PTQ/QAT
                       variants (which were produced for comparison-table
                       completeness only, per train_multimodel_v2.py Step 2.7).
-                      This run float32 (0.5231 C) happened to be the largest
-                      of Hybrid's own 3 variants, not the smallest -- the
-                      float32 default here is a precision requirement, not an
-                      accuracy-driven choice.
+                      qat_int8 (0.4187 C) edged out float32 (0.4267 C) this
+                      run, but the float32 default here is a precision
+                      requirement, not an accuracy-driven choice.
 
   All three neural nets are float32 in this build -- no int8 quantize/
   dequantize logic anywhere in this sketch. Re-run train_multimodel_v2.py's
@@ -98,9 +97,28 @@
   Microcontrollers" Arduino library, but has not been verified against the
   specific library version installed in this project's Arduino workspace.
   If tflite::AllOpsResolver is unavailable in the installed library version,
-  switch to tflite::MicroMutableOpResolver<N> and manually register:
-  FULLY_CONNECTED, RELU, CONV_2D, ADD, MEAN, CONCATENATION, PAD (the ops
-  these float32 models' graphs use).
+  switch to tflite::MicroMutableOpResolver<N> and manually register (verified
+  by loading the actual generated .tflite bytes and inspecting the interpreter's
+  op list, not guessed): FULLY_CONNECTED, RELU, CONV_2D, ADD, SUB, NEG, MEAN,
+  CONCATENATION, PAD, RESHAPE, EXPAND_DIMS, SPACE_TO_BATCH_ND, BATCH_TO_SPACE_ND
+  (the last two come from TCN_Hadamard_v2's dilated Conv1D layer, which TFLite
+  lowers to a space-to-batch/conv/batch-to-space sequence).
+
+  KNOWN BUG, FIXED: HadamardTransform's soft-threshold originally used
+  tf.sign()/tf.abs(), which lowers to a SIGN builtin op. This ESP32's TFLite
+  Micro build's AllOpsResolver does not have SIGN registered, so
+  AllocateTensors() failed for TCN_Hadamard_v2 with "Didn't find op for
+  builtin opcode 'SIGN'", cascading into a crash once the sketch tried to run
+  inference against an unallocated interpreter. Replacing tf.sign() with an
+  equivalent tf.where()-based sign did NOT fix this -- the TFLite converter
+  can canonicalize a "where(x>=0, 1, -1)" pattern back into a SIGN op during
+  graph optimization, independent of what the Python source calls directly.
+  The fix (see train_multimodel_v2.py's HadamardTransform.call()) expresses
+  the same soft-threshold using only RELU and subtraction --
+  sign(x)*relu(|x|-theta) == relu(x-theta) - relu(-x-theta) -- which cannot
+  produce a SIGN op under any graph optimization. Verified by loading the
+  regenerated .tflite bytes and confirming SIGN is absent from the op list,
+  not just by re-reading the Python source.
 */
 
 #include <Arduino.h>
